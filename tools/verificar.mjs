@@ -351,6 +351,16 @@ check('the newest message is editable before its turn reaches the snapshot', () 
 	equal(internals.selectBoundary(partial, newest.location.turn, newest.data.seq), 800, 'cut from its own turn');
 	equal(internals.locateTurn(partial, newest.location.turn, newest.data.seq), null, 'its turn is not projected yet');
 });
+
+check('and it is still editable when the location is not ready either', () => {
+	// Third path: the turn is found by the event seq its own user node carries, so
+	// the cut survives a message whose location has not been projected yet.
+	const owner = userNode('n4', 803, 'just sent', { turn: 3, start: { seq: 805 }, end: { seq: 900 } });
+	const snapshotWithOwner = { timeline: { turnOrder: [1, 2, 3], turns: new Map([[1, turns.turnOne], [2, turns.turnTwo], [3, owner.location.turn]]) }, nodes: new Map() };
+	owner.location.turn.data = new Map([['user', owner]]);
+	equal(internals.selectBoundary(snapshotWithOwner, undefined, 803), 803, 'cut found through its own seq');
+	equal(internals.selectBoundary(snapshotWithOwner, undefined, 9999), null, 'an unknown seq gives no cut');
+});
 check('serviceOf does not propagate the Cordis error', () => {
 	equal(internals.serviceOf(client.ctx, 'sessions') !== undefined, true, 'finds sessions');
 	equal(internals.serviceOf({ get() { throw new Error('without inject'); } }, 'uiWorkspace'), undefined, 'missing service');
