@@ -123,7 +123,7 @@ Put the folder in the profile's dependency tree and use
 node tools/verificar.mjs
 ```
 
-35 checks, no browser needed, and not a mock. The script loads the real
+37 checks, no browser needed, and not a mock. The script loads the real
 `lib/client.js`, runs its `apply()` against a fake client that **imitates
 Cordis's prohibitions** (reading a service you did not declare throws), and walks
 the real path — bubble, pencil, in-place editing, Enter, Escape, send — calling
@@ -140,6 +140,20 @@ Helpers, useful on their own:
   nothing installed: `node tools/asar.mjs grep <archive> <needle>`
 - `tools/eventos.mjs` — print a session log's events in order:
   `node tools/eventos.mjs <session.v4.jsonl.zstd> --skeleton`
+
+## Language
+
+Every string this plugin shows has an English and a Spanish form. The choice is
+made per reader, not per repository:
+
+1. an explicit choice, stored under `localStorage["dsh-edit-in-place:language"]` (`en` or `es`)
+2. otherwise, the reader's own language (`navigator.language`)
+3. otherwise, the harness locale, when it is one of those two
+4. otherwise, English
+
+The reader comes before the harness on purpose: the application can be in English
+while the person using it is not, and these strings belong to the message, not to
+the program's chrome.
 
 ## Limitations, plainly
 

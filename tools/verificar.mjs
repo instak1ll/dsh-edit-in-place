@@ -216,6 +216,10 @@ function buildClient(options = {}) {
 					callback({ uiWorkspace });
 					return () => {};
 				}
+				if (name === 'locale') {
+					callback({ locale: { getLocale: () => ({ id: options.locale ?? 'en' }) } });
+					return () => {};
+				}
 			}
 			return () => {};
 		},
@@ -293,6 +297,18 @@ check('it really declares its dependencies', () => {
 
 const internals = plugin.__internals;
 const client = buildClient();
+
+/**
+ * Pin the language so these checks are deterministic. Without it they would follow
+ * the machine's own locale, and the same script would pass here and fail there.
+ * @param tag - "en" or "es".
+ */
+function pinLanguage(tag) {
+	globalThis.localStorage = { getItem: (key) => (key === internals.LANGUAGE_KEY ? tag : null) };
+	internals.followLocale(null);
+}
+
+pinLanguage('en');
 const turns = buildTurns();
 const snapshot = buildSnapshot(turns);
 const nodeOne = userNode('n1', 8, 'first question from the human', turns.turnOne);
@@ -315,10 +331,25 @@ check('the whole message text is read', () => {
 	equal(internals.messageText({ data: {} }), '', 'message without content');
 	equal(internals.messageText(null), '', 'null message');
 });
-check('a broken snapshot does not throw', () => {
+check('a broken snapshot does not throw, and the cut no longer needs one', () => {
 	equal(internals.locateTurn(null, null, undefined), null, 'turn');
 	equal(internals.locateTurn({ timeline: {} }, {}, 1), null, 'turn');
-	equal(internals.selectBoundary(null, turns.turnTwo, 223), null, 'cut');
+	// The cut comes from the message's own turn, so it resolves even with no snapshot.
+	equal(internals.selectBoundary(null, turns.turnTwo, 223), 218, 'cut without a snapshot');
+});
+
+check('the newest message is editable before its turn reaches the snapshot', () => {
+	// This is the bug the Author hit: after a reply, the freshly sent message could
+	// not be edited. The old rule asked the PREVIOUS turn for its closing seq, which
+	// is not projected while the current turn is still running. The rule now reads
+	// the message's own turn, so it works from the first frame.
+	const newest = userNode('n3', 800, 'message just sent', { turn: 3, start: { seq: 802 }, end: { seq: 900 } });
+	const partial = {
+		timeline: { turnOrder: [1, 2], turns: new Map([[1, turns.turnOne], [2, turns.turnTwo]]) },
+		nodes: new Map(),
+	};
+	equal(internals.selectBoundary(partial, newest.location.turn, newest.data.seq), 800, 'cut from its own turn');
+	equal(internals.locateTurn(partial, newest.location.turn, newest.data.seq), null, 'its turn is not projected yet');
 });
 check('serviceOf does not propagate the Cordis error', () => {
 	equal(internals.serviceOf(client.ctx, 'sessions') !== undefined, true, 'finds sessions');
@@ -421,6 +452,7 @@ check('pressing the pencil opens the edit IN THE SAME PLACE, with no dialog', ()
 });
 
 check('the box takes the width of the column and the buttons say Cancel and Update', () => {
+	pinLanguage('en');
 	internals.openEditor({ key: 'n2', sessionId: 'original-session', atSeq: 218, text: 'hello', turnNumber: 2 });
 	const tree = mount(nodeTwo);
 	truthy(findNode(tree, (candidate) => candidate?.props?.className === 'dshem_editWrap'), 'full width container');
@@ -647,6 +679,32 @@ check('both buttons are the same size and the same shape', () => {
 	truthy(fill, '.dshem_send rule');
 	equal(/border-radius/.test(fill[1]), false, 'the fill does not change the shape');
 	equal(/padding|min-width|font-size/.test(fill[1]), false, 'the fill does not change the size');
+});
+
+/* ---------------- language ---------------- */
+check('the language follows the reader, then the harness, then English', () => {
+	// 1. an explicit choice wins over everything
+	pinLanguage('es');
+	equal(internals.t('update'), 'Actualizar', 'explicit Spanish');
+	pinLanguage('en');
+	equal(internals.t('update'), 'Update', 'explicit English');
+	equal(internals.t('cancel'), 'Cancel', 'cancel in English');
+
+	// 2. with no explicit choice the harness locale decides
+	const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+	Object.defineProperty(globalThis, 'navigator', { value: undefined, configurable: true });
+	globalThis.localStorage = { getItem: () => null };
+	internals.followLocale({ getLocale: () => ({ id: 'es' }) });
+	equal(internals.t('note'), 'Se abre una rama: esta conversación no cambia', 'Spanish harness');
+	internals.followLocale({ getLocale: () => ({ id: 'en' }) });
+	equal(internals.t('update'), 'Update', 'English harness');
+
+	// 3. nobody says anything: English, never a crash
+	internals.followLocale(undefined);
+	equal(internals.t('update'), 'Update', 'English by default');
+	if (originalNavigator !== undefined) Object.defineProperty(globalThis, 'navigator', originalNavigator);
+	pinLanguage('en');
+	delete globalThis.localStorage;
 });
 
 /* ---------------- the Host half ---------------- */
