@@ -37,8 +37,11 @@ there.
 - Your original conversation is never modified. It stays in the sidebar.
 - The branch inherits the whole prefix, then continues with your new text.
 
-This needs no patching of the Host, no new endpoints, and no rewriting of logged
-events.
+For a message that opened a turn, nothing is needed beyond the client: the cut is
+already in the snapshot. For a message sent while the answer was running, the
+browser cannot see where it entered, so the Host reads the session log and answers
+one read-only lookup. Nothing is patched, no logged event is rewritten, and the
+lookup only ever reads.
 
 ## Where it cuts the history, with evidence
 
@@ -59,6 +62,23 @@ turn N:  ... turn/end N-1 | inbox/spliced (your message enters) | turn/start N .
 Confirmed on a live case: editing `TEST` of turn 4 and sending it as
 `TEST EDITED` cut at the `turn/end` of turn 3, and the original still reads
 `TEST`.
+
+A message sent **while the answer is running** is a different shape, and the
+messy part is that the copy the client can see arrives last:
+
+```
+1351  agent/inbox/spliced next-turn  empty
+1352  agent/inbox/spliced next-step  <- the message enters HERE
+1354  assistant/message
+1358  tool/result
+1362  user/message                   <- the copy the client can see
+```
+
+Anything the browser can infer falls after 1352, so a branch cut there would carry
+the original text in its queue and send it again. The log knows the exact position,
+so the browser asks the Host, which reads the session log, walks back to the
+`agent/inbox/spliced` that carried that message and returns the event before it.
+Measured on that same session: message 1362 cuts at 1351, message 1258 cuts at 1252.
 
 ## How it sits in the UI
 
@@ -134,7 +154,7 @@ Put the folder in the profile's dependency tree and use
 node tools/verificar.mjs
 ```
 
-38 checks, no browser needed, and not a mock. The script loads the real
+41 checks, no browser needed, and not a mock. The script loads the real
 `lib/client.js`, runs its `apply()` against a fake client that **imitates
 Cordis's prohibitions** (reading a service you did not declare throws), and walks
 the real path — bubble, pencil, in-place editing, Enter, Escape, send — calling
@@ -169,11 +189,11 @@ the program's chrome.
 ## Limitations, plainly
 
 - **Always a branch.** No branch, no feature: DSH never deletes logged events.
-- **A mid-turn message cannot be branched from yet.** A message sent while the
-  answer is running enters the turn through an inbox splice that this plugin
-  cannot locate from the client, so there is no clean sequence to cut before it.
-  It gets the same bubble and a pencil that explains itself, rather than a button
-  that fails.
+- **Mid-turn messages need the Host route.** A message sent while the answer is
+  running enters the turn through a queue event the browser never receives. The
+  plugin asks the Host, which reads the log and returns the position. If that route
+  is unreachable, those messages keep their pencil and it says so, instead of
+  cutting in the wrong place and sending the old text twice.
 - **Text only.** Attachments of the original message are not carried into the
   branch.
 - **The reference line is ours.** When a message uses `@file` mentions, the bubble

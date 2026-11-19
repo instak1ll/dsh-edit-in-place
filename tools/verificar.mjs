@@ -14,6 +14,9 @@
  * Usage: node tools/verificar.mjs
  */
 import fs from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync as writeFile } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { zstdCompressSync } from 'node:zlib';
 import { pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -419,15 +422,30 @@ check('the pencil is INSIDE the user message', () => {
 	equal(pencil.props.disabled, undefined, 'enabled');
 	equal(pencil.props.title, 'Edit and resend this message', 'label');
 });
-check('a mid-turn message keeps its bubble and explains the pencil', () => {
-	const steering = userNode('s1', 224, 'sent mid-turn', turns.turnTwo);
+await checkAsync('a mid-turn message asks the Host for its cut and opens the editor', async () => {
+	const steering = userNode('s1', 1362, 'sent mid-turn', turns.turnTwo);
 	steering.kind = 'steering';
+	steering.data.id = 'm-1';
+	steering.data.source = { kind: 'user', rpcId: 'r-1' };
+	const asked = [];
+	globalThis.location = { origin: 'http://127.0.0.1:19387', protocol: 'http:' };
+	globalThis.fetch = async (url) => {
+		asked.push(String(url));
+		if (String(url).endsWith('/health')) return { ok: true, json: async () => ({ ok: true }) };
+		return { ok: true, json: async () => ({ ok: true, atSeq: 1351 }) };
+	};
 	const tree = mount(steering);
-	truthy(findNode(tree, (candidate) => typeof candidate?.props?.className === 'string' && candidate.props.className.includes('dshem_bubble')), 'bubble present');
 	const pencil = findNode(tree, (candidate) => candidate?.props?.['data-edit-in-place'] === 'pencil');
 	truthy(pencil, 'pencil present');
-	equal(pencil.props.disabled, true, 'pencil off');
-	equal(pencil.props.title, 'Sent while the answer was running: it cannot be branched from yet', 'explains itself');
+	equal(pencil.props.disabled, undefined, 'pencil is usable');
+	pencil.props.onClick();
+	await new Promise((resolve) => setTimeout(resolve, 60));
+	truthy(asked.some((url) => url.includes('/cut?')), 'the cut was asked of the Host');
+	equal(internals.store.editing?.atSeq, 1351, 'cut taken from the Host');
+	equal(internals.store.editing?.text, 'sent mid-turn', 'text carried over');
+	internals.closeEditor();
+	delete globalThis.fetch;
+	delete globalThis.location;
 });
 check('the message still carries copy and the clock', () => {
 	const tree = mount(nodeTwo);
@@ -730,8 +748,49 @@ check('the language follows the reader, then the harness, then English', () => {
 	delete globalThis.localStorage;
 });
 
-/* ---------------- the Host half ---------------- */
+/* ---------------- the Host half: reading the log ---------------- */
 const host = await import(pathToFileURL(join(ROOT, 'lib', 'index.js')).href);
+
+check('the Host finds the cut before the queue event that carried the message', () => {
+	// The real shape, measured on a live session: the message enters at 1352 and the
+	// durable copy only appears at 1362, after the turn produced more output.
+	const events = [
+		{ seq: 1349, type: 'step/end', data: {} },
+		{ seq: 1351, type: 'agent/inbox/spliced', data: { target: 'next-turn', inserted: [] } },
+		{ seq: 1352, type: 'agent/inbox/spliced', data: { target: 'next-step', inserted: [{ id: 'm-1', source: { kind: 'user', rpcId: 'r-1' } }] } },
+		{ seq: 1354, type: 'assistant/message', data: {} },
+		{ seq: 1358, type: 'tool/result', data: {} },
+		{ seq: 1362, type: 'user/message', data: { id: 'm-1', source: { kind: 'user', rpcId: 'r-1' }, content: [{ type: 'text', text: 'quiero...' }] } },
+	];
+	equal(host.findSteeringCut(events, { seq: 1362 }).atSeq, 1351, 'by the event seq');
+	equal(host.findSteeringCut(events, { id: 'm-1' }).atSeq, 1351, 'by the message id');
+	equal(host.findSteeringCut(events, { rpcId: 'r-1' }).atSeq, 1351, 'by the request id');
+	// A cut at 1354 or 1358 would carry the queued message and send it again.
+	truthy(host.findSteeringCut(events, { seq: 1362 }).atSeq < 1352, 'strictly before the queue event');
+	equal(typeof host.findSteeringCut(events, { seq: 999 }).error, 'string', 'an unknown message explains itself');
+	equal(typeof host.findSteeringCut([], { seq: 1 }).error, 'string', 'an empty log explains itself');
+});
+
+check('the Host reads a log written as chained zstd frames', () => {
+	const frame = (value) => zstdCompressSync(Buffer.from(value, 'utf8'));
+	const buffer = Buffer.concat([frame('{"seq":1,"type":"a"}\n'), frame('{"seq":2,"type":"b"}\n')]);
+	const events = host.eventsOf(buffer);
+	equal(events.length, 2, 'two events');
+	equal(events[1].seq, 2, 'the second one');
+	equal(host.eventsOf(Buffer.from('{"seq":9,"type":"plain"}\n')).length, 1, 'a plain jsonl log too');
+});
+
+check('the Host finds the log without knowing the workspace layout', () => {
+	const home = mkdtempSync(join(tmpdir(), 'dsh-edit-in-place-'));
+	mkdirSync(join(home, 'sessions', '--some-workspace--', 'session-abc'), { recursive: true });
+	const path = join(home, 'sessions', '--some-workspace--', 'session-abc', 'session.v4.jsonl.zstd');
+	writeFile(path, zstdCompressSync(Buffer.from('{"seq":1,"type":"session"}\n', 'utf8')));
+	equal(host.sessionLogPath('session-abc', home), path, 'found');
+	equal(host.sessionLogPath('..\\..\\etc', home), null, 'traversal refused');
+	equal(host.sessionLogPath('session-nope', home), null, 'missing session');
+	equal(host.cutFor('session-abc', { seq: 1 }, home).atSeq, undefined, 'no cut without a queue event');
+});
+/* ---------------- the Host half ---------------- */
 check('the Host half exports apply and name', () => {
 	equal(typeof host.apply, 'function', 'apply');
 	equal(host.name, 'edit-in-place', 'name');
