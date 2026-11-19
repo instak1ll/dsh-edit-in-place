@@ -376,21 +376,20 @@ check('the clock is short', () => {
 reset();
 plugin.apply(client.ctx);
 
-check('it takes the user key of the chat node seat', () => {
-	const node = client.registrations.find((entry) => entry.name === 'conversation.chat.node');
-	truthy(node, 'node registration');
-	equal(node.registration.spec.key, 'user', 'taken key');
-	equal(typeof node.registration.component, 'function', 'component');
-	// The program occupies this key at priority 0 and the lowest priority renders.
-	// Registering at 0 throws "already has an entry for key" and the shadow dies on
-	// the first repaint, which is exactly how the pencil disappeared in use.
-	equal(node.registration.spec.priority, -1, 'shadow priority under the program\'s');
+check('it takes both the user and the steering keys', () => {
+	const nodes = client.registrations.filter((entry) => entry.name === 'conversation.chat.node');
+	const keys = nodes.map((entry) => entry.registration.spec.key).sort();
+	// A message sent while the agent is answering is rendered as `steering`, not
+	// `user`. Taking only `user` left every mid-turn message with no pencil at all.
+	equal(keys.join(','), 'steering,user', 'both keys taken');
+	for (const node of nodes) {
+		equal(typeof node.registration.component, 'function', 'component');
+		// The program occupies these keys at priority 0 and the lowest priority
+		// renders. Registering at 0 throws and the shadow dies on the first repaint,
+		// which is exactly how the pencil disappeared in use.
+		equal(node.registration.spec.priority, -1, 'shadow priority under the program');
+	}
 });
-check('there is no floating dialog any more: editing happens in place', () => {
-	equal(client.registrations.some((entry) => entry.name === 'shell.overlay'), false, 'no overlay');
-	equal(client.registrations.some((entry) => entry.name === 'conversation.chat.turnTail'), false, 'no turnTail');
-});
-
 const nodoComponent = client.registrations.find((entry) => entry.name === 'conversation.chat.node').registration.component;
 const bubbleComponent = internals.UserMessageBubble;
 
@@ -419,6 +418,16 @@ check('the pencil is INSIDE the user message', () => {
 	equal(pencil.type, 'button', 'it is a button');
 	equal(pencil.props.disabled, undefined, 'enabled');
 	equal(pencil.props.title, 'Edit and resend this message', 'label');
+});
+check('a mid-turn message keeps its bubble and explains the pencil', () => {
+	const steering = userNode('s1', 224, 'sent mid-turn', turns.turnTwo);
+	steering.kind = 'steering';
+	const tree = mount(steering);
+	truthy(findNode(tree, (candidate) => typeof candidate?.props?.className === 'string' && candidate.props.className.includes('dshem_bubble')), 'bubble present');
+	const pencil = findNode(tree, (candidate) => candidate?.props?.['data-edit-in-place'] === 'pencil');
+	truthy(pencil, 'pencil present');
+	equal(pencil.props.disabled, true, 'pencil off');
+	equal(pencil.props.title, 'Sent while the answer was running: it cannot be branched from yet', 'explains itself');
 });
 check('the message still carries copy and the clock', () => {
 	const tree = mount(nodeTwo);

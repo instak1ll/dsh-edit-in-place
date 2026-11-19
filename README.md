@@ -74,8 +74,9 @@ rule, and the missing half costs an afternoon:
 
 So a shadow has to sit **under** the program's priority, not beside it: entries
 are sorted ascending by priority and the first live entry wins. This plugin
-registers the `user` key at `priority: -1`, and draws the same bubble the program
-drew, with editing built in.
+registers **two** keys at `priority: -1` — `user` for a message that opened a
+turn, and `steering` for one sent while the answer was running — and draws the
+same bubble the program drew, with editing built in.
 
 Registering at the default 0 does not fail loudly: it fails **later**, on the
 first repaint, when the registration is rebuilt and the collision throws. The
@@ -168,8 +169,11 @@ the program's chrome.
 ## Limitations, plainly
 
 - **Always a branch.** No branch, no feature: DSH never deletes logged events.
-- **Only the message that opened a turn.** A mid-turn steering message keeps the
-  program's renderer and has no pencil.
+- **A mid-turn message cannot be branched from yet.** A message sent while the
+  answer is running enters the turn through an inbox splice that this plugin
+  cannot locate from the client, so there is no clean sequence to cut before it.
+  It gets the same bubble and a pencil that explains itself, rather than a button
+  that fails.
 - **Text only.** Attachments of the original message are not carried into the
   branch.
 - **The reference line is ours.** When a message uses `@file` mentions, the bubble
