@@ -1,17 +1,24 @@
 /**
- * Print the first N events of a DSH session log, in order, with only the fields
- * that matter for placing a fork boundary: seq, type, and a short payload hint.
+ * Print the first events of a DSH session log, in order, with only the fields that
+ * matter for placing a fork boundary: seq, type and a short payload hint.
  *
- * DSH writes one zstd frame per appended block, chained in the same file, so the
- * frames are walked one by one: zstdDecompressSync only returns the first.
+ * DSH writes one zstd frame per appended block, chained inside the same file, so
+ * the frames are walked one by one: zstdDecompressSync only returns the first.
  *
- * Usage: node tools/eventos.mjs <session.v4.jsonl.zstd> [count]
+ * Usage:
+ *   node tools/eventos.mjs <session.v4.jsonl.zstd> [count]
+ *   node tools/eventos.mjs <session.v4.jsonl.zstd> --skeleton
  */
 import { readFileSync } from 'node:fs';
 import { zstdDecompressSync } from 'node:zlib';
 
 const MAGIC = Buffer.from([0x28, 0xb5, 0x2f, 0xfd]);
 
+/**
+ * Decompress every chained frame of a session log.
+ * @param buffer - the whole file.
+ * @returns one string per frame, in order.
+ */
 function frames(buffer) {
 	const starts = [];
 	let from = 0;
@@ -39,8 +46,13 @@ if (!path) {
 	process.exit(2);
 }
 const skeleton = countArg === '--skeleton' || process.argv.includes('--skeleton');
+/**
+ * Only the events that shape a turn, for reading the cut boundary.
+ * `user/message` is omitted on purpose: it is the durable copy, not the door.
+ */
 const SKELETON = new Set(['turn/start', 'turn/end', 'agent/inbox/spliced', 'user/message', 'steering/message']);
 const limit = skeleton ? 400 : Number(countArg ?? 24);
+
 const text = frames(readFileSync(path)).join('');
 let shown = 0;
 for (const line of text.split('\n')) {
@@ -51,8 +63,8 @@ for (const line of text.split('\n')) {
 	} catch {
 		continue;
 	}
-	const data = event.data ?? {};
 	if (skeleton && !SKELETON.has(event.type)) continue;
+	const data = event.data ?? {};
 	const hint =
 		event.type === 'user/message'
 			? JSON.stringify((data.content ?? []).map((part) => part.text ?? part.type).join(' ')).slice(0, 70)

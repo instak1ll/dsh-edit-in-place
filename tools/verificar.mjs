@@ -1,17 +1,17 @@
 /**
- * Portero de «editar mis mensajes»: ejecuta el codigo REAL del plugin y lo
- * somete a las comprobaciones que se pueden hacer sin navegador.
+ * Gate for edit-in-place: it runs the plugin's REAL code and puts it through the
+ * checks that can be done without a browser.
  *
- * No es un simulacro. Se carga `lib/client.js`, se ejecuta su `apply()` contra
- * un cliente falso que imita las prohibiciones de Cordis, y se recorre el camino
- * de verdad —burbuja, lapiz, edicion EN EL SITIO, reenviar— llamando a los mismos
- * componentes que llamaria React.
+ * This is not a mock. It loads `lib/client.js`, runs its `apply()` against a fake
+ * client that imitates Cordis's prohibitions, and walks the real path — bubble,
+ * pencil, in-place editing, Enter, Escape, send — calling the same components
+ * React would call.
  *
- * Las cifras del fixture son las del log de una sesion real sondeado con
- * `tools/eventos.mjs`: turno 1 con `turn/start` en 4 y `turn/end` en 218, turno
- * 2 con `turn/start` en 220 y `turn/end` en 375.
+ * The fixture numbers come from a real session log read with `tools/eventos.mjs`:
+ * turn 1 with `turn/start` at 4 and `turn/end` at 218, turn 2 with `turn/start` at
+ * 220 and `turn/end` at 375.
  *
- * Uso: node tools/verificar.mjs
+ * Usage: node tools/verificar.mjs
  */
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
@@ -24,6 +24,11 @@ const ROOT = join(HERE, '..');
 let passed = 0;
 const failures = [];
 
+/**
+ * Run one synchronous check and record the outcome.
+ * @param label - what is being checked.
+ * @param work - the check itself.
+ */
 function check(label, work) {
 	try {
 		work();
@@ -31,10 +36,15 @@ function check(label, work) {
 		console.log(`  ok    ${label}`);
 	} catch (error) {
 		failures.push(`${label}: ${error.message}`);
-		console.log(`  FALLO ${label}\n        ${error.message}`);
+		console.log(`  FAIL  ${label}\n        ${error.message}`);
 	}
 }
 
+/**
+ * Run one asynchronous check and record the outcome.
+ * @param label - what is being checked.
+ * @param work - the check itself, which may await.
+ */
 async function checkAsync(label, work) {
 	try {
 		await work();
@@ -42,30 +52,30 @@ async function checkAsync(label, work) {
 		console.log(`  ok    ${label}`);
 	} catch (error) {
 		failures.push(`${label}: ${error.message}`);
-		console.log(`  FALLO ${label}\n        ${error.message}`);
+		console.log(`  FAIL  ${label}\n        ${error.message}`);
 	}
 }
 
 function equal(actual, expected, what) {
-	if (actual !== expected) throw new Error(`${what}: esperaba ${JSON.stringify(expected)} y llego ${JSON.stringify(actual)}`);
+	if (actual !== expected) throw new Error(`${what}: expected ${JSON.stringify(expected)} and got ${JSON.stringify(actual)}`);
 }
 
 function truthy(value, what) {
-	if (!value) throw new Error(`${what}: llego ${JSON.stringify(value)}`);
+	if (!value) throw new Error(`${what}: got ${JSON.stringify(value)}`);
 }
 
 /* ------------------------------------------------------------------ *
- * React de mentira: lo justo para recorrer los componentes de verdad.
+ * A fake React: just enough to walk the real components.
  * ------------------------------------------------------------------ */
 function createFakeReact() {
 	let store = [];
 	let cursor = 0;
-	/** Componente nuevo: estado limpio. */
+	/** A new component instance: clean state. */
 	const reset = () => {
 		store = [];
 		cursor = 0;
 	};
-	/** Volver a pintar el mismo componente: se conserva su estado. */
+	/** Render the same component again: its state is kept. */
 	const beginRender = () => {
 		cursor = 0;
 	};
@@ -112,7 +122,7 @@ function createFakeReact() {
 	return { react, reset, beginRender };
 }
 
-/** Recorrer un arbol de createElement buscando el primer nodo que cumpla. */
+/** Walk a createElement tree for the first node that matches. */
 function findNode(tree, predicate) {
 	if (tree === null || tree === undefined || typeof tree !== 'object') return null;
 	if (Array.isArray(tree)) {
@@ -129,7 +139,7 @@ function findNode(tree, predicate) {
 }
 
 /* ------------------------------------------------------------------ *
- * Fixture: historial con la numeracion real de un log de DSH.
+ * Fixture: a history with the numbering of a real DSH log.
  * ------------------------------------------------------------------ */
 function buildTurns() {
 	return {
@@ -158,7 +168,7 @@ function buildSnapshot(turns) {
 }
 
 /* ------------------------------------------------------------------ *
- * Cliente falso: imita a Cordis y apunta todo lo que el plugin hace.
+ * Fake client: imitates Cordis and records everything the plugin does.
  * ------------------------------------------------------------------ */
 function buildClient(options = {}) {
 	const calls = { fork: [], openSession: [], prompt: [] };
@@ -167,10 +177,10 @@ function buildClient(options = {}) {
 		async fork(input) {
 			calls.fork.push(input);
 			if (options.forkThrows !== undefined) throw new Error(options.forkThrows);
-			return 'rama-1';
+			return 'branch-1';
 		},
 		binding(id) {
-			if (id !== 'rama-1') return undefined;
+			if (id !== 'branch-1') return undefined;
 			if (childState.openState === 'cold') return undefined;
 			return {
 				session: {
@@ -195,8 +205,8 @@ function buildClient(options = {}) {
 			return () => {};
 		},
 		get(name) {
-			// Cordis: leer un servicio no declarado en `inject` lanza. El plugin
-			// no debe depender de esto para funcionar.
+			// Cordis: reading a service that was not declared in `inject` throws. The
+			// plugin must not depend on this to work.
 			if (name === 'sessions') return sessions;
 			throw new Error('cannot get property "' + name + '" without inject');
 		},
@@ -224,9 +234,9 @@ function buildClient(options = {}) {
 }
 
 /* ------------------------------------------------------------------ *
- * Ejecucion
+ * Run
  * ------------------------------------------------------------------ */
-console.log('Portero: editar y reenviar mis mensajes (edicion en el sitio)\n');
+console.log('Gate: edit and resend my own messages (in-place editing)\n');
 
 let captured;
 globalThis.window = {
@@ -242,7 +252,7 @@ await import(pathToFileURL(join(ROOT, 'lib', 'client.js')).href);
 const { react, reset, beginRender } = createFakeReact();
 const copies = [];
 const primitives = {
-	projectUserText: (text) => ({ glyph: 'texto', text }),
+	projectUserText: (text) => ({ glyph: 'text', text }),
 	writeClipboard: (text) => {
 		copies.push(text);
 		return Promise.resolve(true);
@@ -256,311 +266,310 @@ const primitives = {
 		return { type: 'fileicon', props };
 	},
 	IconCopyOutlineRegular: function CopyGlyph() {
-		return { type: 'copiar' };
+		return { type: 'copy' };
 	},
 	IconCheckOutlineRegular: function CheckGlyph() {
-		return { type: 'copiado' };
+		return { type: 'copied' };
 	},
 };
 let plugin;
 
-check('el modulo declara un id estable', () => equal(captured.id, 'dsh-edit-in-place', 'id'));
-check('la fabrica devuelve el plugin sin tocar el DOM', () => {
+check('the module declares a stable id', () => equal(captured.id, 'dsh-edit-in-place', 'id'));
+check('the factory returns the plugin without touching the DOM', () => {
 	plugin = captured.factory((name) => {
 		if (name === 'react') return react;
 		if (name === '@deepseek-ai/dsh-client-ui-primitives') return primitives;
-		throw new Error(`require inesperado: ${name}`);
+		throw new Error(`unexpected require: ${name}`);
 	});
 	truthy(plugin, 'plugin');
 });
-check('exporta apply', () => equal(typeof plugin.apply, 'function', 'apply'));
-check('declara sus dependencias de verdad', () => {
+check('it exports apply', () => equal(typeof plugin.apply, 'function', 'apply'));
+check('it really declares its dependencies', () => {
 	truthy(Array.isArray(plugin.inject), 'inject');
-	equal(plugin.inject.includes('slots'), true, 'inject contiene slots');
-	// Sin declarar `sessions`, cordis prohibe leerlo y el reenvio murio en pantalla.
-	equal(plugin.inject.includes('sessions'), true, 'inject contiene sessions');
+	equal(plugin.inject.includes('slots'), true, 'inject has slots');
+	// Without declaring `sessions`, Cordis forbids reading it and sending died on screen.
+	equal(plugin.inject.includes('sessions'), true, 'inject has sessions');
 });
 
 const internals = plugin.__internals;
 const client = buildClient();
 const turns = buildTurns();
 const snapshot = buildSnapshot(turns);
-const nodeOne = userNode('n1', 8, 'primera pregunta del humano', turns.turnOne);
-const nodeTwo = userNode('n2', 223, 'segunda pregunta del humano', turns.turnTwo);
+const nodeOne = userNode('n1', 8, 'first question from the human', turns.turnOne);
+const nodeTwo = userNode('n2', 223, 'second question from the human', turns.turnTwo);
 
-check('el mensaje del turno 2 corta en el turn/end del turno 1 (218)', () => {
+check('the message of turn 2 cuts at the turn/end of turn 1 (218)', () => {
 	const located = internals.locateTurn(snapshot, turns.turnTwo, 223);
-	equal(located?.number, 2, 'numero de turno');
-	equal(located?.atSeq, 218, 'corte');
-	equal(located?.first, false, 'es el primero');
+	equal(located?.number, 2, 'turn number');
+	equal(located?.atSeq, 218, 'cut');
+	equal(located?.first, false, 'is the first');
 });
-check('el mensaje del turno 1 corta dos posiciones antes de su turn/start (2)', () => {
+check('the message of turn 1 cuts two positions before its turn/start (2)', () => {
 	const located = internals.locateTurn(snapshot, turns.turnOne, 8);
-	equal(located?.number, 1, 'numero de turno');
-	equal(located?.atSeq, 2, 'corte');
-	equal(located?.first, true, 'es el primero');
+	equal(located?.number, 1, 'turn number');
+	equal(located?.atSeq, 2, 'cut');
+	equal(located?.first, true, 'is the first');
 });
-check('el texto del mensaje se lee entero', () => {
-	equal(internals.messageText(nodeTwo), 'segunda pregunta del humano', 'texto');
-	equal(internals.messageText({ data: {} }), '', 'mensaje sin contenido');
-	equal(internals.messageText(null), '', 'mensaje nulo');
+check('the whole message text is read', () => {
+	equal(internals.messageText(nodeTwo), 'second question from the human', 'text');
+	equal(internals.messageText({ data: {} }), '', 'message without content');
+	equal(internals.messageText(null), '', 'null message');
 });
-check('un snapshot roto no lanza', () => {
-	equal(internals.locateTurn(null, null, undefined), null, 'turno');
-	equal(internals.locateTurn({ timeline: {} }, {}, 1), null, 'turno');
-	equal(internals.selectBoundary(null, turns.turnTwo, 223), null, 'corte');
+check('a broken snapshot does not throw', () => {
+	equal(internals.locateTurn(null, null, undefined), null, 'turn');
+	equal(internals.locateTurn({ timeline: {} }, {}, 1), null, 'turn');
+	equal(internals.selectBoundary(null, turns.turnTwo, 223), null, 'cut');
 });
-check('serviceOf no propaga el error de cordis', () => {
-	equal(internals.serviceOf(client.ctx, 'sessions') !== undefined, true, 'encuentra sessions');
-	equal(internals.serviceOf({ get() { throw new Error('sin inject'); } }, 'uiWorkspace'), undefined, 'sin servicio');
-	equal(internals.serviceOf(null, 'sessions'), undefined, 'ctx nulo');
+check('serviceOf does not propagate the Cordis error', () => {
+	equal(internals.serviceOf(client.ctx, 'sessions') !== undefined, true, 'finds sessions');
+	equal(internals.serviceOf({ get() { throw new Error('without inject'); } }, 'uiWorkspace'), undefined, 'missing service');
+	equal(internals.serviceOf(null, 'sessions'), undefined, 'null ctx');
 });
-check('la hora se pinta corta', () => {
+check('the clock is short', () => {
 	const now = Date.now();
-	truthy(/^\d{2}:\d{2}$/.test(internals.clockText(now)), `hora de hoy: ${internals.clockText(now)}`);
-	equal(internals.clockText(undefined), '', 'sin hora');
+	truthy(/^\d{2}:\d{2}$/.test(internals.clockText(now)), `today's clock: ${internals.clockText(now)}`);
+	equal(internals.clockText(undefined), '', 'no clock');
 });
 
-/* ---------------- montaje: el lapiz va en el mensaje del usuario ---------- */
+/* ---------------- mounting: the pencil lives in the user message ---------- */
 reset();
 plugin.apply(client.ctx);
 
-check('ocupa la clave user del asiento de nodos del chat', () => {
-	const nodo = client.registrations.find((entry) => entry.name === 'conversation.chat.node');
-	truthy(nodo, 'registro del nodo');
-	equal(nodo.registration.spec.key, 'user', 'clave ocupada');
-	equal(typeof nodo.registration.component, 'function', 'componente');
+check('it takes the user key of the chat node seat', () => {
+	const node = client.registrations.find((entry) => entry.name === 'conversation.chat.node');
+	truthy(node, 'node registration');
+	equal(node.registration.spec.key, 'user', 'taken key');
+	equal(typeof node.registration.component, 'function', 'component');
 });
-check('ya NO hay dialogo flotante: se edita en el sitio', () => {
-	equal(client.registrations.some((entry) => entry.name === 'shell.overlay'), false, 'sin capa flotante');
-	equal(client.registrations.some((entry) => entry.name === 'conversation.chat.turnTail'), false, 'sin turnTail');
+check('there is no floating dialog any more: editing happens in place', () => {
+	equal(client.registrations.some((entry) => entry.name === 'shell.overlay'), false, 'no overlay');
+	equal(client.registrations.some((entry) => entry.name === 'conversation.chat.turnTail'), false, 'no turnTail');
 });
 
 const nodoComponent = client.registrations.find((entry) => entry.name === 'conversation.chat.node').registration.component;
 const bubbleComponent = internals.UserMessageBubble;
 
-/** Pintar la burbuja como componente nuevo. */
+/** Paint the bubble as a new component instance. */
 function mount(node) {
 	reset();
 	return bubbleComponent({
 		node,
 		atSeq: 218,
-		sessionId: 'sesion-original',
+		sessionId: 'original-session',
 		openFile: () => {},
 		openSkill: () => {},
-		renderMessageImages: (props) => ({ type: 'imagenes', props }),
+		renderMessageImages: (props) => ({ type: 'images', props }),
 	});
 }
 
-check('el mensaje se pinta con su burbuja y su texto', () => {
+check('the message paints with its bubble and its text', () => {
 	const tree = mount(nodeTwo);
-	equal(tree?.props?.['data-editar-mensaje'], 'mensaje', 'fila del mensaje');
-	truthy(findNode(tree, (candidate) => typeof candidate?.props?.className === 'string' && candidate.props.className.includes('dshem_bubble')), 'burbuja');
+	equal(tree?.props?.['data-edit-in-place'], 'message', 'message row');
+	truthy(findNode(tree, (candidate) => typeof candidate?.props?.className === 'string' && candidate.props.className.includes('dshem_bubble')), 'bubble');
 });
-check('el lapiz esta DENTRO del mensaje del usuario', () => {
+check('the pencil is INSIDE the user message', () => {
 	const tree = mount(nodeTwo);
-	const lapiz = findNode(tree, (candidate) => candidate?.props?.['data-editar-mensaje'] === 'lapiz');
-	truthy(lapiz, 'lapiz');
-	equal(lapiz.type, 'button', 'es un boton');
-	equal(lapiz.props.disabled, undefined, 'habilitado');
-	equal(lapiz.props.title, 'Editar y reenviar este mensaje', 'etiqueta');
+	const pencil = findNode(tree, (candidate) => candidate?.props?.['data-edit-in-place'] === 'pencil');
+	truthy(pencil, 'pencil');
+	equal(pencil.type, 'button', 'it is a button');
+	equal(pencil.props.disabled, undefined, 'enabled');
+	equal(pencil.props.title, 'Edit and resend this message', 'label');
 });
-check('el mensaje trae copiar y la hora, como antes', () => {
+check('the message still carries copy and the clock', () => {
 	const tree = mount(nodeTwo);
-	truthy(findNode(tree, (candidate) => candidate?.props?.['data-editar-mensaje'] === 'copiar'), 'boton de copiar');
-	const hora = findNode(tree, (candidate) => typeof candidate?.props?.className === 'string' && candidate.props.className.includes('dshem_utime'));
-	truthy(hora, 'la hora');
-	truthy(/^\d{2}:\d{2}$|^\d{2}\/\d{2} /.test(String(hora.props.children)), `hora: ${hora.props.children}`);
+	truthy(findNode(tree, (candidate) => candidate?.props?.['data-edit-in-place'] === 'copy'), 'copy button');
+	const clock = findNode(tree, (candidate) => typeof candidate?.props?.className === 'string' && candidate.props.className.includes('dshem_utime'));
+	truthy(clock, 'the clock');
+	truthy(/^\d{2}:\d{2}$|^\d{2}\/\d{2} /.test(String(clock.props.children)), `clock: ${clock.props.children}`);
 });
-check('copiar copia el texto del mensaje', async () => {
+check('copy copies the message text', async () => {
 	const tree = mount(nodeTwo);
-	const copiar = findNode(tree, (candidate) => candidate?.props?.['data-editar-mensaje'] === 'copiar');
-	copiar.props.onClick();
+	const copy = findNode(tree, (candidate) => candidate?.props?.['data-edit-in-place'] === 'copy');
+	copy.props.onClick();
 	await new Promise((resolve) => setTimeout(resolve, 10));
-	equal(copies.at(-1), 'segunda pregunta del humano', 'texto copiado');
+	equal(copies.at(-1), 'second question from the human', 'copied text');
 });
 
-check('sin snapshot la burbuja se pinta igual y el lapiz queda apagado', () => {
+check('without a snapshot the bubble still paints and the pencil is off', () => {
 	reset();
 	const outer = nodoComponent({ node: nodeTwo, sessionId: 'x', openFile: () => {}, openSkill: () => {} });
-	truthy(outer, 'componente elegido');
+	truthy(outer, 'chosen component');
 	reset();
 	const tree = bubbleComponent({ node: nodeTwo, atSeq: null, sessionId: 'x', openFile: () => {}, openSkill: () => {} });
-	const lapiz = findNode(tree, (candidate) => candidate?.props?.['data-editar-mensaje'] === 'lapiz');
-	equal(lapiz.props.disabled, true, 'apagado');
+	const pencil = findNode(tree, (candidate) => candidate?.props?.['data-edit-in-place'] === 'pencil');
+	equal(pencil.props.disabled, true, 'off');
 });
 
-/* ---------------- edicion en el sitio ---------------- */
+/* ---------------- editing in place ---------------- */
 internals.closeEditor();
 
-check('pulsar el lapiz abre la edicion EN EL MISMO HUECO, sin dialogo', () => {
+check('pressing the pencil opens the edit IN THE SAME PLACE, with no dialog', () => {
 	const tree = mount(nodeTwo);
-	const lapiz = findNode(tree, (candidate) => candidate?.props?.['data-editar-mensaje'] === 'lapiz');
-	lapiz.props.onClick();
+	const pencil = findNode(tree, (candidate) => candidate?.props?.['data-edit-in-place'] === 'pencil');
+	pencil.props.onClick();
 	const payload = internals.store.editing;
-	truthy(payload, 'edicion abierta');
-	equal(payload.key, 'n2', 'mensaje identificado');
-	equal(payload.atSeq, 218, 'corte');
-	equal(payload.sessionId, 'sesion-original', 'sesion');
-	equal(payload.text, 'segunda pregunta del humano', 'texto');
-	// Y el mensaje se repinta como caja de texto, no como burbuja ni capa flotante.
+	truthy(payload, 'edit opened');
+	equal(payload.key, 'n2', 'message identified');
+	equal(payload.atSeq, 218, 'cut');
+	equal(payload.sessionId, 'original-session', 'session');
+	equal(payload.text, 'second question from the human', 'text');
+	// And the message repaints as a text box, not as a bubble or an overlay.
 	beginRender();
-	const editingTree = bubbleComponent({ node: nodeTwo, atSeq: 218, sessionId: 'sesion-original', openFile: () => {}, openSkill: () => {} });
-	truthy(findNode(editingTree, (candidate) => candidate?.props?.['data-editar-mensaje'] === 'texto'), 'caja de texto en la burbuja');
-	equal(findNode(editingTree, (candidate) => candidate?.props?.['data-editar-mensaje'] === 'lapiz'), null, 'el lapiz desaparece mientras editas');
+	const editingTree = bubbleComponent({ node: nodeTwo, atSeq: 218, sessionId: 'original-session', openFile: () => {}, openSkill: () => {} });
+	truthy(findNode(editingTree, (candidate) => candidate?.props?.['data-edit-in-place'] === 'text'), 'text box inside the bubble');
+	equal(findNode(editingTree, (candidate) => candidate?.props?.['data-edit-in-place'] === 'pencil'), null, 'the pencil goes away while editing');
 });
 
-check('la caja ocupa el ancho de la columna y los botones dicen Cancelar y Actualizar', () => {
-	internals.openEditor({ key: 'n2', sessionId: 'sesion-original', atSeq: 218, text: 'hola', turnNumber: 2 });
+check('the box takes the width of the column and the buttons say Cancel and Update', () => {
+	internals.openEditor({ key: 'n2', sessionId: 'original-session', atSeq: 218, text: 'hello', turnNumber: 2 });
 	const tree = mount(nodeTwo);
-	truthy(findNode(tree, (candidate) => candidate?.props?.className === 'dshem_editWrap'), 'contenedor a lo ancho');
-	const actualizar = findNode(tree, (candidate) => candidate?.props?.['data-editar-mensaje'] === 'reenviar');
-	equal(actualizar.props.children, 'Actualizar', 'texto del boton');
-	const cancelar = findNode(tree, (candidate) => candidate?.props?.['data-editar-mensaje'] === 'cancelar');
-	equal(cancelar.props.children, 'Cancelar', 'texto de cancelar');
+	truthy(findNode(tree, (candidate) => candidate?.props?.className === 'dshem_editWrap'), 'full width container');
+	const update = findNode(tree, (candidate) => candidate?.props?.['data-edit-in-place'] === 'send');
+	equal(update.props.children, 'Update', 'button text');
+	const cancel = findNode(tree, (candidate) => candidate?.props?.['data-edit-in-place'] === 'cancel');
+	equal(cancel.props.children, 'Cancel', 'cancel text');
 	internals.closeEditor();
 });
-check('la edicion no se abre en un mensaje que no es el suyo', () => {
-	internals.openEditor({ key: 'n2', sessionId: 'sesion-original', atSeq: 218, text: 'x', turnNumber: 2 });
+check('the edit does not open on a message that is not its own', () => {
+	internals.openEditor({ key: 'n2', sessionId: 'original-session', atSeq: 218, text: 'x', turnNumber: 2 });
 	const tree = mount(nodeOne);
-	equal(findNode(tree, (candidate) => candidate?.props?.['data-editar-mensaje'] === 'texto'), null, 'el otro mensaje sigue siendo burbuja');
-	truthy(findNode(tree, (candidate) => typeof candidate?.props?.className === 'string' && candidate.props.className.includes('dshem_bubble')), 'burbuja intacta');
+	equal(findNode(tree, (candidate) => candidate?.props?.['data-edit-in-place'] === 'text'), null, 'the other message stays a bubble');
+	truthy(findNode(tree, (candidate) => typeof candidate?.props?.className === 'string' && candidate.props.className.includes('dshem_bubble')), 'bubble intact');
 	internals.closeEditor();
 });
-
-check('un clic con arrastre o con texto seleccionado no abre la edicion', () => {
+check('a drag or a selection does not open the edit', () => {
 	internals.closeEditor();
 	const tree = mount(nodeTwo);
 	const bubble = findNode(tree, (candidate) => typeof candidate?.props?.className === 'string' && candidate.props.className.includes('dshem_bubble'));
 	bubble.props.onMouseDown({ clientX: 10, clientY: 10 });
 	bubble.props.onMouseUp({ clientX: 60, clientY: 10 });
-	equal(internals.store.editing, null, 'un arrastre no edita');
-	globalThis.getSelection = () => ({ toString: () => 'texto seleccionado' });
+	equal(internals.store.editing, null, 'a drag does not edit');
+	globalThis.getSelection = () => ({ toString: () => 'selected text' });
 	bubble.props.onMouseDown({ clientX: 10, clientY: 10 });
 	bubble.props.onMouseUp({ clientX: 10, clientY: 10 });
-	equal(internals.store.editing, null, 'una seleccion no edita');
+	equal(internals.store.editing, null, 'a selection does not edit');
 	globalThis.getSelection = () => ({ toString: () => '' });
 	bubble.props.onMouseDown({ clientX: 10, clientY: 10 });
 	bubble.props.onMouseUp({ clientX: 11, clientY: 10 });
-	truthy(internals.store.editing !== null, 'un clic limpio si edita');
+	truthy(internals.store.editing !== null, 'a clean click does edit');
 	internals.closeEditor();
 	delete globalThis.getSelection;
 });
 
-/* ---------------- flujo completo ---------------- */
-await checkAsync('al reenviar se crea la rama, se abre y se manda el texto', async () => {
-	internals.openEditor({ key: 'n2', sessionId: 'sesion-original', atSeq: 218, text: 'segunda pregunta del humano', turnNumber: 2 });
+/* ---------------- the whole path ---------------- */
+await checkAsync('sending creates the branch, opens it and sends the text', async () => {
+	internals.openEditor({ key: 'n2', sessionId: 'original-session', atSeq: 218, text: 'second question from the human', turnNumber: 2 });
 	reset();
-	const tree = bubbleComponent({ node: nodeTwo, atSeq: 218, sessionId: 'sesion-original', openFile: () => {}, openSkill: () => {} });
-	const textarea = findNode(tree, (candidate) => candidate?.props?.['data-editar-mensaje'] === 'texto');
-	truthy(textarea, 'caja de texto');
-	equal(textarea.props.value, 'segunda pregunta del humano', 'texto inicial en la caja');
-	const button = findNode(tree, (candidate) => candidate?.props?.['data-editar-mensaje'] === 'reenviar');
-	truthy(button, 'boton de reenviar');
+	const tree = bubbleComponent({ node: nodeTwo, atSeq: 218, sessionId: 'original-session', openFile: () => {}, openSkill: () => {} });
+	const textarea = findNode(tree, (candidate) => candidate?.props?.['data-edit-in-place'] === 'text');
+	truthy(textarea, 'text box');
+	equal(textarea.props.value, 'second question from the human', 'text in the box');
+	const button = findNode(tree, (candidate) => candidate?.props?.['data-edit-in-place'] === 'send');
+	truthy(button, 'send button');
 	button.props.onClick();
 	await new Promise((resolve) => setTimeout(resolve, 30));
-	equal(client.calls.fork.length, 1, 'una sola rama');
-	equal(client.calls.fork[0].atSeq, 218, 'corte pedido al Host');
-	equal(client.calls.fork[0].sessionId, 'sesion-original', 'sesion de origen');
-	equal(client.calls.fork[0].increaseTitle, true, 'titulo incrementado');
-	equal(client.calls.openSession[0], 'rama-1', 'la vista salta a la rama');
-	equal(client.calls.prompt.length, 1, 'un mensaje reenviado');
-	equal(client.calls.prompt[0].content?.[0]?.text, 'segunda pregunta del humano', 'texto reenviado');
-	equal(client.calls.prompt[0].content?.[0]?.type, 'text', 'tipo de parte');
-	equal(client.calls.prompt[0].mode, 'queue', 'modo');
-	equal(internals.store.editing, null, 'la edicion se cierra al terminar');
+	equal(client.calls.fork.length, 1, 'one branch only');
+	equal(client.calls.fork[0].atSeq, 218, 'cut asked of the Host');
+	equal(client.calls.fork[0].sessionId, 'original-session', 'source session');
+	equal(client.calls.fork[0].increaseTitle, true, 'title incremented');
+	equal(client.calls.openSession[0], 'branch-1', 'the view jumps to the branch');
+	equal(client.calls.prompt.length, 1, 'one message sent');
+	equal(client.calls.prompt[0].content?.[0]?.text, 'second question from the human', 'text sent');
+	equal(client.calls.prompt[0].content?.[0]?.type, 'text', 'part type');
+	equal(client.calls.prompt[0].mode, 'queue', 'mode');
+	equal(internals.store.editing, null, 'the edit closes when it is done');
 });
 
-await checkAsync('lo que viaja es el texto corregido, no el original', async () => {
-	internals.openEditor({ key: 'n2', sessionId: 'sesion-original', atSeq: 218, text: 'original', turnNumber: 2 });
+await checkAsync('what travels is the corrected text, not the original', async () => {
+	internals.openEditor({ key: 'n2', sessionId: 'original-session', atSeq: 218, text: 'original', turnNumber: 2 });
 	reset();
-	const tree = bubbleComponent({ node: nodeTwo, atSeq: 218, sessionId: 'sesion-original', openFile: () => {}, openSkill: () => {} });
-	const textarea = findNode(tree, (candidate) => candidate?.props?.['data-editar-mensaje'] === 'texto');
-	equal(textarea.props.value, 'original', 'texto de partida');
-	textarea.props.onChange({ target: { value: 'texto corregido a mano' } });
-	// El estado vive en el componente: se vuelve a pintar el mismo, como React.
+	const tree = bubbleComponent({ node: nodeTwo, atSeq: 218, sessionId: 'original-session', openFile: () => {}, openSkill: () => {} });
+	const textarea = findNode(tree, (candidate) => candidate?.props?.['data-edit-in-place'] === 'text');
+	equal(textarea.props.value, 'original', 'starting text');
+	textarea.props.onChange({ target: { value: 'text corrected by hand' } });
+	// State lives in the component: render the same one again, as React would.
 	beginRender();
-	const again = bubbleComponent({ node: nodeTwo, atSeq: 218, sessionId: 'sesion-original', openFile: () => {}, openSkill: () => {} });
-	const shown = findNode(again, (candidate) => candidate?.props?.['data-editar-mensaje'] === 'texto');
-	equal(shown.props.value, 'texto corregido a mano', 'la caja conserva lo escrito');
-	const send = findNode(again, (candidate) => candidate?.props?.['data-editar-mensaje'] === 'reenviar');
+	const again = bubbleComponent({ node: nodeTwo, atSeq: 218, sessionId: 'original-session', openFile: () => {}, openSkill: () => {} });
+	const shown = findNode(again, (candidate) => candidate?.props?.['data-edit-in-place'] === 'text');
+	equal(shown.props.value, 'text corrected by hand', 'the box keeps what was typed');
+	const send = findNode(again, (candidate) => candidate?.props?.['data-edit-in-place'] === 'send');
 	const before = client.calls.prompt.length;
 	send.props.onClick();
 	await new Promise((resolve) => setTimeout(resolve, 30));
-	equal(client.calls.prompt.length, before + 1, 'se mando una vez mas');
-	equal(client.calls.prompt.at(-1).content?.[0]?.text, 'texto corregido a mano', 'viaja lo corregido');
+	equal(client.calls.prompt.length, before + 1, 'sent one more time');
+	equal(client.calls.prompt.at(-1).content?.[0]?.text, 'text corrected by hand', 'the correction travels');
 });
 
-await checkAsync('Escape cancela sin mandar nada', async () => {
-	internals.openEditor({ key: 'n2', sessionId: 'sesion-original', atSeq: 218, text: 'sin tocar', turnNumber: 2 });
+await checkAsync('Escape cancels without sending anything', async () => {
+	internals.openEditor({ key: 'n2', sessionId: 'original-session', atSeq: 218, text: 'untouched', turnNumber: 2 });
 	reset();
-	const tree = bubbleComponent({ node: nodeTwo, atSeq: 218, sessionId: 'sesion-original', openFile: () => {}, openSkill: () => {} });
-	const textarea = findNode(tree, (candidate) => candidate?.props?.['data-editar-mensaje'] === 'texto');
+	const tree = bubbleComponent({ node: nodeTwo, atSeq: 218, sessionId: 'original-session', openFile: () => {}, openSkill: () => {} });
+	const textarea = findNode(tree, (candidate) => candidate?.props?.['data-edit-in-place'] === 'text');
 	const before = client.calls.fork.length;
 	let prevented = false;
 	textarea.props.onKeyDown({ key: 'Escape', preventDefault: () => { prevented = true; }, stopPropagation: () => {} });
-	equal(prevented, true, 'Escape se toma');
-	equal(internals.store.editing, null, 'la edicion se cierra');
-	equal(client.calls.fork.length, before, 'no se creo ninguna rama');
+	equal(prevented, true, 'Escape is taken');
+	equal(internals.store.editing, null, 'the edit closes');
+	equal(client.calls.fork.length, before, 'no branch was created');
 });
 
-await checkAsync('Enter reenvia', async () => {
-	internals.openEditor({ key: 'n2', sessionId: 'sesion-original', atSeq: 218, text: 'con enter', turnNumber: 2 });
+await checkAsync('Enter sends', async () => {
+	internals.openEditor({ key: 'n2', sessionId: 'original-session', atSeq: 218, text: 'with enter', turnNumber: 2 });
 	reset();
-	const tree = bubbleComponent({ node: nodeTwo, atSeq: 218, sessionId: 'sesion-original', openFile: () => {}, openSkill: () => {} });
-	const textarea = findNode(tree, (candidate) => candidate?.props?.['data-editar-mensaje'] === 'texto');
+	const tree = bubbleComponent({ node: nodeTwo, atSeq: 218, sessionId: 'original-session', openFile: () => {}, openSkill: () => {} });
+	const textarea = findNode(tree, (candidate) => candidate?.props?.['data-edit-in-place'] === 'text');
 	const before = client.calls.prompt.length;
 	textarea.props.onKeyDown({ key: 'Enter', shiftKey: false, preventDefault: () => {}, stopPropagation: () => {} });
 	await new Promise((resolve) => setTimeout(resolve, 30));
-	equal(client.calls.prompt.length, before + 1, 'Enter manda');
-	equal(client.calls.prompt.at(-1).content?.[0]?.text, 'con enter', 'texto enviado');
+	equal(client.calls.prompt.length, before + 1, 'Enter sends');
+	equal(client.calls.prompt.at(-1).content?.[0]?.text, 'with enter', 'text sent');
 });
 
-await checkAsync('Shift+Enter no manda nada', async () => {
-	internals.openEditor({ key: 'n2', sessionId: 'sesion-original', atSeq: 218, text: 'salto de linea', turnNumber: 2 });
+await checkAsync('Shift+Enter sends nothing', async () => {
+	internals.openEditor({ key: 'n2', sessionId: 'original-session', atSeq: 218, text: 'line break', turnNumber: 2 });
 	reset();
-	const tree = bubbleComponent({ node: nodeTwo, atSeq: 218, sessionId: 'sesion-original', openFile: () => {}, openSkill: () => {} });
-	const textarea = findNode(tree, (candidate) => candidate?.props?.['data-editar-mensaje'] === 'texto');
+	const tree = bubbleComponent({ node: nodeTwo, atSeq: 218, sessionId: 'original-session', openFile: () => {}, openSkill: () => {} });
+	const textarea = findNode(tree, (candidate) => candidate?.props?.['data-edit-in-place'] === 'text');
 	const before = client.calls.prompt.length;
 	textarea.props.onKeyDown({ key: 'Enter', shiftKey: true, preventDefault: () => {}, stopPropagation: () => {} });
 	await new Promise((resolve) => setTimeout(resolve, 20));
-	equal(client.calls.prompt.length, before, 'no manda');
+	equal(client.calls.prompt.length, before, 'does not send');
 	internals.closeEditor();
 });
 
-await checkAsync('si el Host rechaza el envio, el motivo se ve en la burbuja', async () => {
-	const fallon = buildClient({ promptResult: { ok: false, error: { message: 'cuota agotada' } } });
+await checkAsync('if the Host rejects the send, the reason is shown in the bubble', async () => {
+	const failing = buildClient({ promptResult: { ok: false, error: { message: 'quota exhausted' } } });
 	reset();
-	plugin.apply(fallon.ctx);
-	internals.openEditor({ key: 'n2', sessionId: 'sesion-original', atSeq: 218, text: 'hola', turnNumber: 2 });
+	plugin.apply(failing.ctx);
+	internals.openEditor({ key: 'n2', sessionId: 'original-session', atSeq: 218, text: 'hello', turnNumber: 2 });
 	reset();
-	const tree = bubbleComponent({ node: nodeTwo, atSeq: 218, sessionId: 'sesion-original', openFile: () => {}, openSkill: () => {} });
-	const send = findNode(tree, (candidate) => candidate?.props?.['data-editar-mensaje'] === 'reenviar');
+	const tree = bubbleComponent({ node: nodeTwo, atSeq: 218, sessionId: 'original-session', openFile: () => {}, openSkill: () => {} });
+	const send = findNode(tree, (candidate) => candidate?.props?.['data-edit-in-place'] === 'send');
 	send.props.onClick();
 	await new Promise((resolve) => setTimeout(resolve, 40));
-	truthy(internals.store.editing !== null, 'la edicion sigue abierta tras el fallo');
+	truthy(internals.store.editing !== null, 'the edit stays open after the failure');
 	beginRender();
-	const reopened = bubbleComponent({ node: nodeTwo, atSeq: 218, sessionId: 'sesion-original', openFile: () => {}, openSkill: () => {} });
-	const error = findNode(reopened, (candidate) => candidate?.props?.['data-editar-mensaje'] === 'error');
-	truthy(error, 'mensaje de error visible');
-	equal(error.props.children, 'cuota agotada', 'motivo del Host');
+	const reopened = bubbleComponent({ node: nodeTwo, atSeq: 218, sessionId: 'original-session', openFile: () => {}, openSkill: () => {} });
+	const error = findNode(reopened, (candidate) => candidate?.props?.['data-edit-in-place'] === 'error');
+	truthy(error, 'error message visible');
+	equal(error.props.children, 'quota exhausted', 'reason from the Host');
 	internals.closeEditor();
 });
 
-await checkAsync('una rama que no abre termina en error legible', async () => {
-	const cojo = buildClient();
-	cojo.childState.openState = 'error';
+await checkAsync('a branch that does not open ends in a readable error', async () => {
+	const broken = buildClient();
+	broken.childState.openState = 'error';
 	await internals
-		.resendInFork(cojo.ctx, { sessionId: 'sesion-original', atSeq: 218, text: 'hola', timeoutMs: 50 })
+		.resendInFork(broken.ctx, { sessionId: 'original-session', atSeq: 218, text: 'hello', timeoutMs: 50 })
 		.then(() => {
-			throw new Error('deberia haber fallado');
+			throw new Error('it should have failed');
 		})
 		.catch((error) => {
-			truthy(String(error.message).includes('no se pudo abrir'), `mensaje: ${error.message}`);
+			truthy(String(error.message).includes('could not be opened'), `message: ${error.message}`);
 		});
 });
 
-await checkAsync('sin el servicio de sesiones el error es legible, no de cordis', async () => {
+await checkAsync('without the sessions service the error is readable, not Cordis jargon', async () => {
 	const ctx = {
 		effect: () => () => {},
 		slots: { inject() {}, register() {} },
@@ -574,84 +583,84 @@ await checkAsync('sin el servicio de sesiones el error es legible, no de cordis'
 		},
 	});
 	await internals
-		.resendInFork(ctx, { sessionId: 's', atSeq: 10, text: 'hola' })
+		.resendInFork(ctx, { sessionId: 's', atSeq: 10, text: 'hello' })
 		.then(() => {
-			throw new Error('deberia haber fallado');
+			throw new Error('it should have failed');
 		})
 		.catch((error) => {
-			truthy(String(error.message).includes('servicio de sesiones'), 'mensaje legible: ' + error.message);
-			equal(String(error.message).includes('without inject'), false, 'sin jerga de cordis');
+			truthy(String(error.message).includes('sessions service'), 'readable message: ' + error.message);
+			equal(String(error.message).includes('without inject'), false, 'no Cordis jargon');
 		});
 });
 
-await checkAsync('un corte imposible se rechaza antes de tocar el Host', async () => {
-	const limpio = buildClient();
+await checkAsync('an impossible cut is rejected before touching the Host', async () => {
+	const clean = buildClient();
 	await internals
-		.resendInFork(limpio.ctx, { sessionId: 's', atSeq: null, text: 'hola' })
+		.resendInFork(clean.ctx, { sessionId: 's', atSeq: null, text: 'hello' })
 		.then(() => {
-			throw new Error('deberia haber fallado');
+			throw new Error('it should have failed');
 		})
 		.catch((error) => {
-			equal(limpio.calls.fork.length, 0, 'ramas creadas');
-			truthy(String(error.message).includes('cortar'), `mensaje: ${error.message}`);
+			equal(clean.calls.fork.length, 0, 'branches created');
+			truthy(String(error.message).includes('cut'), `message: ${error.message}`);
 		});
 });
 
-await checkAsync('un texto vacio no se manda', async () => {
-	const limpio = buildClient();
+await checkAsync('an empty text is not sent', async () => {
+	const clean = buildClient();
 	await internals
-		.resendInFork(limpio.ctx, { sessionId: 's', atSeq: 10, text: '   ' })
+		.resendInFork(clean.ctx, { sessionId: 's', atSeq: 10, text: '   ' })
 		.then(() => {
-			throw new Error('deberia haber fallado');
+			throw new Error('it should have failed');
 		})
 		.catch((error) => {
-			equal(limpio.calls.fork.length, 0, 'ramas creadas');
-			truthy(String(error.message).includes('vacio'), `mensaje: ${error.message}`);
+			equal(clean.calls.fork.length, 0, 'branches created');
+			truthy(String(error.message).includes('empty'), `message: ${error.message}`);
 		});
 });
 
-check('el boton de confirmar usa el par de colores del programa', () => {
-	// La etiqueta se quedo invisible en tema oscuro: el acento de marca es casi
-	// blanco ahi, y el texto tambien era blanco. El programa resuelve esto con
-	// `--dsw-alias-button-info-fill` y etiqueta blanca, asi que se copia igual.
-	const fuente = fs.readFileSync(join(ROOT, 'lib', 'client.js'), 'utf8');
-	const regla = /.dshem_send{([^}]*)}/.exec(fuente);
-	truthy(regla, 'regla .dshem_send');
-	truthy(regla[1].includes('dsw-alias-button-info-fill'), 'fondo del programa');
-	truthy(regla[1].includes('color:#fff'), 'etiqueta blanca');
-	const problema = /\.dshem_send\{[^}]*background:var\(--dsw-alias-brand-primary\)[^}]*color:#fff/.test(fuente);
-	equal(problema, false, 'sin blanco sobre blanco');
+/* ---------------- CSS guards: things only a screen would show ---------------- */
+const source = fs.readFileSync(join(ROOT, 'lib', 'client.js'), 'utf8');
+
+check('the confirm button uses the program\'s own colour pair', () => {
+	// The label came out invisible on dark themes: the brand accent there is nearly
+	// white and the text was white too. The program solves it with a filled-button
+	// token, so that is copied exactly.
+	const rule = /\.dshem_send\{([^}]*)\}/.exec(source);
+	truthy(rule, '.dshem_send rule');
+	truthy(rule[1].includes('dsw-alias-button-info-fill'), 'program fill');
+	truthy(rule[1].includes('color:#fff'), 'white label');
+	const broken = /\.dshem_send\{[^}]*background:var\(--dsw-alias-brand-primary\)[^}]*color:#fff/.test(source);
+	equal(broken, false, 'no white on white');
 });
 
-check('los dos botones miden y se redondean igual', () => {
-	// El Creador: «que ambos botones fueran de las mismas dimensiones». Comparten
-	// la caja de .dshem_small: mismo alto, mismo ancho minimo y mismo radio.
-	// .dshem_send solo puede cambiar el relleno.
-	const fuente = fs.readFileSync(join(ROOT, 'lib', 'client.js'), 'utf8');
-	const base = /\.dshem_small\{([^}]*)\}/.exec(fuente);
-	truthy(base, 'regla .dshem_small');
-	truthy(base[1].includes('min-width'), 'ancho minimo comun');
-	truthy(base[1].includes('border-radius:8px'), 'radio comun');
-	truthy(base[1].includes('box-sizing:border-box'), 'misma caja');
-	truthy(base[1].includes('border:1px solid'), 'mismo borde');
-	const relleno = /\.dshem_send\{([^}]*)\}/.exec(fuente);
-	truthy(relleno, 'regla .dshem_send');
-	equal(/border-radius/.test(relleno[1]), false, 'el relleno no cambia la forma');
-	equal(/padding|min-width|font-size/.test(relleno[1]), false, 'el relleno no cambia el tamano');
+check('both buttons are the same size and the same shape', () => {
+	// Same height, same minimum width and same radius, so they can never drift
+	// apart: the fill may only change colour.
+	const base = /\.dshem_small\{([^}]*)\}/.exec(source);
+	truthy(base, '.dshem_small rule');
+	truthy(base[1].includes('min-width'), 'shared minimum width');
+	truthy(base[1].includes('border-radius:8px'), 'shared radius');
+	truthy(base[1].includes('box-sizing:border-box'), 'shared box');
+	truthy(base[1].includes('border:1px solid'), 'shared border');
+	const fill = /\.dshem_send\{([^}]*)\}/.exec(source);
+	truthy(fill, '.dshem_send rule');
+	equal(/border-radius/.test(fill[1]), false, 'the fill does not change the shape');
+	equal(/padding|min-width|font-size/.test(fill[1]), false, 'the fill does not change the size');
 });
 
-/* ---------------- mitad del Host ---------------- */
+/* ---------------- the Host half ---------------- */
 const host = await import(pathToFileURL(join(ROOT, 'lib', 'index.js')).href);
-check('la mitad del Host exporta apply y name', () => {
+check('the Host half exports apply and name', () => {
 	equal(typeof host.apply, 'function', 'apply');
 	equal(host.name, 'edit-in-place', 'name');
 });
-check('la mitad del Host no revienta sin logger', () => {
+check('the Host half does not break without a logger', () => {
 	host.apply({});
 	host.apply({ logger: { info: () => {} } });
 });
 
-console.log(`\n${passed} comprobaciones correctas, ${failures.length} fallos`);
+console.log(`\n${passed} checks passed, ${failures.length} failed`);
 if (failures.length > 0) {
 	for (const failure of failures) console.log(`  - ${failure}`);
 	process.exit(1);
