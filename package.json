@@ -1,0 +1,63 @@
+{
+  "name": "dsh-edit-in-place",
+  "version": "1.0.0",
+  "description": "Edit one of your own messages in place inside DeepSeek Harness and send it again in a new branch, leaving the original conversation untouched",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "cordis.patch.yml",
+    "README.md",
+    "README.es.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "cordis",
+    "chat",
+    "edit-message",
+    "branch",
+    "inline-edit"
+  ],
+  "license": "MIT",
+  "author": "Артём Гладков (instak1ll)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/instak1ll/dsh-edit-in-place.git"
+  },
+  "homepage": "https://github.com/instak1ll/dsh-edit-in-place#readme",
+  "bugs": {
+    "url": "https://github.com/instak1ll/dsh-edit-in-place/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "verify": "node tools/verificar.mjs",
+    "events": "node tools/eventos.mjs",
+    "asar": "node tools/asar.mjs"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.0.4"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-chat"
+      ]
+    }
+  }
+}

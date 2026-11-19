@@ -1,0 +1,9 @@
+# Patch this package contributes to a dsh profile.
+#
+# One entry is enough: the Host half (`lib/index.js`) carries the browser half of
+# the same package through `dsh.client` in package.json, so the client bundle is
+# served and mounted under the same plugin. Do not add a second entry for
+# `./client` — that would mount the same slot registration twice.
+- insert:
+    - id: edit-in-place
+      name: "dsh-edit-in-place"

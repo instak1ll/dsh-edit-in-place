@@ -1,0 +1,10 @@
+# Normalise line endings: the repository stores LF, whatever the editor writes.
+* text=auto eol=lf
+
+# Binary, never touched.
+*.png binary
+*.jpg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.zstd binary

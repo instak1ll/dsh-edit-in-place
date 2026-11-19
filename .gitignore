@@ -1,0 +1,21 @@
+# Never publish these.
+
+# Research material: files extracted from the installed DeepSeek Harness bundle.
+# They are DeepSeek's code, not ours. Kept locally to read how the client works.
+ref/
+
+# Dependencies, if any are ever installed.
+node_modules/
+
+# Local backups and scratch output.
+*.bak
+*.bak-*
+*.log
+*.zstd
+*.tmp
+dist/
+
+# OS noise.
+.DS_Store
+Thumbs.db
+desktop.ini
