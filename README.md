@@ -5,6 +5,14 @@ conversation stays exactly as it was.
 
 A plugin for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
 
+![A message of your own, with its pencil next to the clock and the copy button](docs/message.png)
+
+![The same message, editable in place: Cancel and Update below, and the branch note](docs/editing.png)
+
+*The interface in those screenshots is in Spanish because the machine that took them
+is set to Spanish. The same build shows English to an English reader, and the
+repository itself is English.*
+
 ## What it does
 
 Your own messages get a pencil next to the clock and the copy button. Press the
