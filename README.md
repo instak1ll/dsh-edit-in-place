@@ -5,7 +5,7 @@ conversation stays exactly as it was.
 
 A plugin for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
 
-![Your message, with an arrow pointing at the pencil, next to the clock and the copy button](docs/message-marked.png)
+![Your message, with an arrow pointing at the pencil, next to the clock and the copy button](docs/message-arrow.png)
 
 ![The bubble becomes a text box in its own place, with Cancel and Update below](docs/text-box.png)
 
