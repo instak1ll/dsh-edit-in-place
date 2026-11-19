@@ -5,13 +5,15 @@ conversation stays exactly as it was.
 
 A plugin for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
 
-![A message of your own, with its pencil next to the clock and the copy button](docs/message.png)
+![Your message, with its pencil next to the clock and the copy button](docs/message.png)
 
-![The same message turned into a text box in its own place, with Cancel and Update below](docs/editing.png)
+![The bubble becomes a text box in its own place, with Cancel and Update below](docs/editing.png)
+
+![The corrected text, sent again in a new conversation while the original stays](docs/rewritten.png)
 
 *The interface in those screenshots is in Spanish because the machine that took them
 is set to Spanish. The same build shows English to an English reader, and the
-repository itself is English. Both files carry no metadata at all: only the header,
+repository itself is English. None of the three carries metadata: only the header,
 the pixels and the end marker survive, so nothing about the machine that took them
 travels with them (`node tools/limpia-imagenes.mjs --list docs/*.png` shows it).*
 
