@@ -7,7 +7,7 @@ A plugin for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)
 
 ![Your message, with its pencil next to the clock and the copy button](docs/message.png)
 
-![The bubble becomes a text box in its own place, with Cancel and Update below](docs/editing.png)
+![The bubble becomes a text box in its own place, with Cancel and Update below](docs/text-box.png)
 
 ![The corrected text sent again in a new conversation, while the original stays](docs/rewritten.png)
 
