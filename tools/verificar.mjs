@@ -381,6 +381,10 @@ check('it takes the user key of the chat node seat', () => {
 	truthy(node, 'node registration');
 	equal(node.registration.spec.key, 'user', 'taken key');
 	equal(typeof node.registration.component, 'function', 'component');
+	// The program occupies this key at priority 0 and the lowest priority renders.
+	// Registering at 0 throws "already has an entry for key" and the shadow dies on
+	// the first repaint, which is exactly how the pencil disappeared in use.
+	equal(node.registration.spec.priority, -1, 'shadow priority under the program\'s');
 });
 check('there is no floating dialog any more: editing happens in place', () => {
 	equal(client.registrations.some((entry) => entry.name === 'shell.overlay'), false, 'no overlay');

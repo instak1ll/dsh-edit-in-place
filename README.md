@@ -64,13 +64,23 @@ Confirmed on a live case: editing `TEST` of turn 4 and sending it as
 
 DeepSeek Harness declares no child slots inside the user message bubble, so the
 pencil cannot be added through an ordinary extension point. What it does allow is
-replacing the renderer of a chat node by key, and the slot catalogue says so in
-these words:
+replacing the renderer of a chat node by key — but the catalogue's wording
+("registering an already-occupied key replaces that occupant") is only half the
+rule, and the missing half costs an afternoon:
 
-> Registering an already-occupied key replaces that occupant.
+> keyed slot "conversation.chat.node" already has an entry for key "user" at
+> priority 0 (registered by mf) — register at a different priority to shadow it
+> (lowest renders)
 
-So the plugin takes the `user` key of `conversation.chat.node` and draws the same
-bubble the program drew, with editing built in.
+So a shadow has to sit **under** the program's priority, not beside it: entries
+are sorted ascending by priority and the first live entry wins. This plugin
+registers the `user` key at `priority: -1`, and draws the same bubble the program
+drew, with editing built in.
+
+Registering at the default 0 does not fail loudly: it fails **later**, on the
+first repaint, when the registration is rebuilt and the collision throws. The
+pencil then disappears and the program's renderer comes back, which looks exactly
+like a random bug.
 
 To keep that bubble identical, two things are used at once:
 
@@ -123,7 +133,7 @@ Put the folder in the profile's dependency tree and use
 node tools/verificar.mjs
 ```
 
-37 checks, no browser needed, and not a mock. The script loads the real
+38 checks, no browser needed, and not a mock. The script loads the real
 `lib/client.js`, runs its `apply()` against a fake client that **imitates
 Cordis's prohibitions** (reading a service you did not declare throws), and walks
 the real path — bubble, pencil, in-place editing, Enter, Escape, send — calling
