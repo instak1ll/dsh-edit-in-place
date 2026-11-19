@@ -5,9 +5,9 @@ conversation stays exactly as it was.
 
 A plugin for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
 
-![The message turned into a text box in its own place, with Cancel and Update below](docs/editing.png)
+![A message of your own, with its pencil next to the clock and the copy button](docs/message.png)
 
-![The same message once closed, with its pencil next to the clock and the copy button](docs/message.png)
+![The same message turned into a text box in its own place, with Cancel and Update below](docs/editing.png)
 
 *The interface in those screenshots is in Spanish because the machine that took them
 is set to Spanish. The same build shows English to an English reader, and the
